@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "firstName": "Ahmed",
+    "lastName": "Amer",
+    "email": "ahmed.amer@gmail.com",
+    "marketName": "Teddy Store",
+    "marketLocation": "Cairo, Egypt",
+    "password": "Password123",
+    "role": "admin"
+  },
+  {
+    "id": 1,
+    "firstName": "Abhi",
+    "lastName": "Arora",
+    "email": "abhiarora1137@gmail.com",
+    "marketName": "Teddy Store",
+    "marketLocation": "Cairo, Egypt",
+    "password": "111",
+    "role": "admin"
+  },
+  {
+    "id": 2,
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john.doe@example.com",
+    "marketName": "John's Market",
+    "marketLocation": "New York, USA",
+    "password": "Password123",
+    "role": "vendor"
+  },
+  {
+    "id": 3,
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "email": "jane.smith@example.com",
+    "marketName": "Jane's Shop",
+    "marketLocation": "London, UK",
+    "password": "Password123",
+    "role": "vendor"
+  },
+  {
+    "id": 4,
+    "firstName": "Demo",
+    "lastName": "User",
+    "email": "demo@example.com",
+    "marketName": "Demo Store",
+    "marketLocation": "Demo City, Country",
+    "password": "Demo123",
+    "role": "vendor"
+  }
+]

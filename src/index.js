@@ -1,18 +1,142 @@
-import express from 'express'
-import dotenv from 'dotenv'
-import cors from 'cors'
+import express from 'express';
+import dotenv from 'dotenv';
+import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config()
-const app = express()
+// Import routes
+import authRoutes from './routes/auth.js';
 
-app.use(cors())
-app.use(express.json())
+// Configure __dirname in ES module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+// Initialize dotenv
+dotenv.config();
+
+// Create Express app
+const app = express();
+
+// CORS Configuration - Very permissive for development
+app.use(cors({
+  origin: '*',                               // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allow all common HTTP methods
+  allowedHeaders: '*',                       // Allow all headers
+  credentials: true                          // Allow cookies
+}));
+
+// Pre-flight requests
+app.options('*', cors());
+
+// Body parser middleware - Make sure this comes BEFORE routes
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Debug middleware to log all requests
+app.use((req, res, next) => {
+  const now = new Date().toISOString();
+  console.log(`[${now}] ${req.method} ${req.url}`);
+  console.log('Headers:', req.headers);
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+  }
+  next();
+});
+
+// Ensure data directory exists
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir);
+}
+
+// Create users.json if it doesn't exist
+const usersFilePath = path.join(dataDir, 'users.json');
+if (!fs.existsSync(usersFilePath)) {
+  const initialUsers = [
+    {
+      "id": 1,
+      "firstName": "Ahmed",
+      "lastName": "Amer",
+      "email": "ahmed.amer@gmail.com",
+      "marketName": "Teddy Store",
+      "marketLocation": "Cairo, Egypt",
+      "password": "Password123",
+      "role": "admin"
+    },
+    {
+      "id": 2,
+      "firstName": "John",
+      "lastName": "Doe",
+      "email": "john.doe@example.com",
+      "marketName": "John's Market",
+      "marketLocation": "New York, USA",
+      "password": "Password123",
+      "role": "vendor"
+    },
+    {
+      "id": 3,
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "email": "jane.smith@example.com",
+      "marketName": "Jane's Shop",
+      "marketLocation": "London, UK",
+      "password": "Password123",
+      "role": "vendor"
+    },
+    {
+      "id": 4,
+      "firstName": "Demo",
+      "lastName": "User",
+      "email": "demo@example.com",
+      "marketName": "Demo Store",
+      "marketLocation": "Demo City, Country",
+      "password": "Demo123",
+      "role": "vendor"
+    }
+  ];
+  fs.writeFileSync(usersFilePath, JSON.stringify(initialUsers, null, 2), 'utf8');
+  console.log('Created initial users.json file');
+}
+
+// Root route
 app.get('/', (req, res) => {
-  res.send('Vendor Backend Running!')
-})
+  res.send('Vendor Backend Running!');
+});
 
-const PORT = process.env.PORT || 5000
+// Test route to verify CORS
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'API is working correctly!' });
+});
+
+// Use authentication routes
+app.use('/api/auth', authRoutes);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({
+    success: false,
+    message: 'Server error',
+    error: err.message
+  });
+});
+
+// Handle 404s
+app.use((req, res) => {
+  console.log(`404 Not Found: ${req.method} ${req.url}`);
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
+  });
+});
+
+// Define port
+const PORT = process.env.PORT || 5001;
+
+// Start the server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
+  console.log(`Server running on port ${PORT}`);
+  console.log(`API URL: http://localhost:${PORT}/api`);
+  console.log('CORS: Enabled for all origins (development mode)');
+});
