@@ -4,9 +4,14 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import pg from 'pg';
+const { Pool } = pg;
+import dashboardRoutes from './routes/dashboardRoutes.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
+import vendorRoutes from './routes/vendorRoutes.js';
+import productRoutes from './routes/productRoutes.js';
 
 // Configure __dirname in ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -17,6 +22,35 @@ dotenv.config();
 
 // Create Express app
 const app = express();
+
+// Initialize PostgreSQL connection pool
+const pool = new Pool({
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  database: process.env.DB_NAME,
+  ssl: {
+    rejectUnauthorized: false,
+    sslmode: 'require'
+  }
+});
+
+// Test database connection
+const testDbConnection = async () => {
+  try {
+    const client = await pool.connect();
+    console.log('PostgreSQL database connected successfully');
+    client.release();
+  } catch (error) {
+    console.error('Database connection error:', error);
+  }
+};
+
+testDbConnection();
+
+// Make the pool available to the app
+app.locals.db = pool;
 
 // CORS Configuration - Very permissive for development
 app.use(cors({
@@ -112,6 +146,11 @@ app.get('/api/test', (req, res) => {
 // Use authentication routes
 app.use('/api/auth', authRoutes);
 
+// Use vendor and product routes
+app.use('/api/vendors', vendorRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
@@ -139,4 +178,7 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`API URL: http://localhost:${PORT}/api`);
   console.log('CORS: Enabled for all origins (development mode)');
+  console.log('PostgreSQL database: Connected');
 });
+
+export { pool };

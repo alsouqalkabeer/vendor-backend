@@ -1,27 +1,24 @@
 import express from 'express';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-// Configure __dirname in ES module
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import jwt from 'jsonwebtoken'; // Make sure to install: npm install jsonwebtoken
+import bcrypt from 'bcrypt'; // Make sure to install: npm install bcrypt
+import { pool } from '../index.js';
 
 const router = express.Router();
 
-// Load users from JSON file
-const loadUsers = () => {
+// Find vendor in PostgreSQL database
+const findVendorByEmail = async (email) => {
   try {
-    const usersData = fs.readFileSync(path.join(__dirname, '../data/users.json'), 'utf8');
-    return JSON.parse(usersData);
+    const query = 'SELECT * FROM vendors WHERE main_email = $1';
+    const { rows } = await pool.query(query, [email]);
+    return rows[0];
   } catch (error) {
-    console.error('Error loading users data:', error);
-    return [];
+    console.error('Error finding vendor in database:', error);
+    return null;
   }
 };
 
 // Login route
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     console.log('Login request received');
     console.log('Request body:', req.body);
@@ -49,44 +46,83 @@ router.post('/login', (req, res) => {
         message: 'Email and password are required' 
       });
     }
+
+    // Find the vendor in the PostgreSQL database
+    const vendor = await findVendorByEmail(email);
     
-    // Load users
-    const users = loadUsers();
-    console.log(`Looking for user with email: ${email}`);
-    console.log(`Total users in database: ${users.length}`);
-    
-    // Find user by email
-    const user = users.find(user => user.email.toLowerCase() === email.toLowerCase());
-    
-    if (!user) {
-      console.log(`User not found: ${email}`);
+    if (!vendor) {
+      console.log(`Vendor not found with email: ${email}`);
       return res.status(401).json({ 
         success: false, 
         message: 'Invalid email or password' 
       });
     }
     
-    // Check password
-    if (user.password !== password) {
-      console.log(`Invalid password for user: ${email}`);
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid email or password' 
-      });
+    // Check if password field exists in the vendor record
+    if (!vendor.password) {
+      console.log(`Vendor has no password set: ${email}`);
+      
+      // Temporary fallback during transition: check against hardcoded password
+      if (password !== 'Password123') {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Invalid email or password' 
+        });
+      }
+    } else {
+      // Compare the provided password with the stored hash
+      const isPasswordValid = await bcrypt.compare(password, vendor.password);
+      
+      if (!isPasswordValid) {
+        console.log(`Invalid password for vendor: ${email}`);
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Invalid email or password' 
+        });
+      }
     }
     
-    console.log(`User authenticated successfully: ${user.email}`);
+    console.log(`Vendor authenticated successfully: ${vendor.name}`);
     
-    // Create user data to return (exclude password)
-    const userData = { ...user };
-    delete userData.password;
+    // Extract first and last name from market_name
+    let firstName = 'Vendor';
+    let lastName = '';
     
-    // Return success with user data
-    res.status(200).json({
+    if (vendor.market_name && vendor.market_name.includes(' ')) {
+      [firstName, ...lastName] = vendor.market_name.split(' ');
+      lastName = lastName.join(' ');
+    } else if (vendor.market_name) {
+      firstName = vendor.market_name;
+    }
+    
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        id: vendor.id,
+        email: vendor.main_email,
+        name: vendor.name,
+        role: 'vendor'
+      },
+      process.env.JWT_SECRET || 'vendor-backend-secret',
+      { expiresIn: '1d' }
+    );
+    
+    // Return success with vendor data in the format expected by the frontend
+    return res.status(200).json({
       success: true,
       message: 'Login successful',
-      user: userData,
-      token: `token-${userData.id}-${Date.now()}` // Generate a simple mock token
+      user: {
+        id: vendor.id,
+        firstName,
+        lastName,
+        email: vendor.main_email,
+        marketName: vendor.market_name,
+        marketLocation: `${vendor.city}, ${vendor.country}`,
+        role: 'vendor',
+        primaryColor: vendor.primary_color,
+        slug: vendor.slug
+      },
+      token
     });
     
   } catch (error) {
@@ -100,65 +136,135 @@ router.post('/login', (req, res) => {
 });
 
 // Registration route
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
   try {
     console.log('Registration request received:', req.body);
     
     const { firstName, lastName, email, marketName, marketLocation, password } = req.body;
     
     // Validate required fields
-    if (!firstName || !lastName || !email || !marketName || !marketLocation || !password) {
+    if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({ 
         success: false, 
         message: 'All fields are required' 
       });
     }
     
-    // Load current users
-    const users = loadUsers();
-    
-    // Check if email already exists
-    if (users.some(user => user.email.toLowerCase() === email.toLowerCase())) {
+    // Check if email already exists in PostgreSQL
+    const existingVendor = await findVendorByEmail(email);
+    if (existingVendor) {
       return res.status(400).json({
         success: false,
         message: 'Email already registered'
       });
     }
     
-    // Create new user
-    const newUser = {
-      id: users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 1,
-      firstName,
-      lastName,
+    // Hash the password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    
+    // Generate default marketName and marketLocation if not provided
+    const finalMarketName = marketName || `${firstName}'s Store`;
+    let city = 'Cairo'; // Default city
+    let country = 'Egypt'; // Default country
+    
+    // Extract city and country from marketLocation if provided
+    if (marketLocation && marketLocation.includes(',')) {
+      const locationParts = marketLocation.split(',');
+      city = locationParts[0].trim();
+      country = locationParts[1].trim();
+    }
+    
+    // Create base slug from market name
+    let baseSlug = finalMarketName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    
+    // Check if the slug already exists and generate a unique one if needed
+    let slug = baseSlug;
+    let slugExists = true;
+    let counter = 1;
+    
+    while (slugExists) {
+      // Check if the current slug exists
+      const slugQuery = 'SELECT id FROM vendors WHERE slug = $1';
+      const { rows } = await pool.query(slugQuery, [slug]);
+      
+      if (rows.length === 0) {
+        // Slug is unique, we can use it
+        slugExists = false;
+      } else {
+        // Slug exists, try with a counter
+        slug = `${baseSlug}-${counter}`;
+        counter++;
+      }
+    }
+    
+    // Create entry in PostgreSQL vendors table
+    const insertQuery = `
+      INSERT INTO vendors (
+        name, 
+        slug, 
+        description, 
+        primary_color,
+        market_name, 
+        main_email, 
+        country, 
+        city,
+        status,
+        password
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING *
+    `;
+    
+    const values = [
+      finalMarketName,
+      slug, // Now using the unique slug
+      `${finalMarketName} - A vendor on our platform`,
+      '#3F51B5', // Default blue color
+      finalMarketName,
       email,
-      marketName,
-      marketLocation,
-      password,
-      role: 'vendor' // Default role
-    };
+      country,
+      city,
+      'active',
+      hashedPassword // Store the hashed password
+    ];
     
-    // Add to users array
-    users.push(newUser);
+    const { rows } = await pool.query(insertQuery, values);
+    const newVendor = rows[0];
+    console.log('New vendor created in PostgreSQL with ID:', newVendor.id);
+    console.log('Using unique slug:', slug);
     
-    // Save back to JSON file
-    fs.writeFileSync(
-      path.join(__dirname, '../data/users.json'),
-      JSON.stringify(users, null, 2),
-      'utf8'
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        id: newVendor.id,
+        email: newVendor.main_email,
+        name: newVendor.name,
+        role: 'vendor'
+      },
+      process.env.JWT_SECRET || 'vendor-backend-secret',
+      { expiresIn: '1d' }
     );
     
-    console.log('New user registered:', newUser.email);
-    
-    // Create user data to return (exclude password)
-    const userData = { ...newUser };
-    delete userData.password;
-    
-    // Return success with user data
+    // Return success with vendor data
     res.status(201).json({
       success: true,
       message: 'Registration successful',
-      user: userData,
-      token: `token-${userData.id}-${Date.now()}` // Generate a simple mock token
+      user: {
+        id: newVendor.id,
+        firstName,
+        lastName,
+        email: newVendor.main_email,
+        marketName: newVendor.market_name,
+        marketLocation: `${newVendor.city}, ${newVendor.country}`,
+        role: 'vendor',
+        // Include additional vendor data
+        primaryColor: newVendor.primary_color,
+        slug: newVendor.slug
+      },
+      token
     });
     
   } catch (error) {
@@ -171,10 +277,9 @@ router.post('/register', (req, res) => {
   }
 });
 
-// Get current user route (protected)
-router.get('/me', (req, res) => {
+// Verify JWT token middleware
+const verifyToken = (req, res, next) => {
   try {
-    // This would normally validate a token from authorization header
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -184,8 +289,6 @@ router.get('/me', (req, res) => {
       });
     }
     
-    // This is a mock implementation - in a real app, you would verify the token
-    // and retrieve the user based on token data
     const token = authHeader.split(' ')[1];
     
     if (!token) {
@@ -195,17 +298,63 @@ router.get('/me', (req, res) => {
       });
     }
     
-    // Mock user retrieval - in reality, you would decode the token and find the user
-    const users = loadUsers();
-    const mockUser = users[0]; // Just return the first user for demo
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'vendor-backend-secret');
+    req.user = decoded;
     
-    // Create user data to return (exclude password)
-    const userData = { ...mockUser };
-    delete userData.password;
+    next();
+  } catch (error) {
+    console.error('Token verification error:', error);
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Invalid or expired token' 
+    });
+  }
+};
+
+// Get current user route (protected)
+router.get('/me', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
     
-    res.status(200).json({
+    // Get vendor from PostgreSQL
+    const query = 'SELECT * FROM vendors WHERE id = $1';
+    const { rows } = await pool.query(query, [userId]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Vendor not found' 
+      });
+    }
+    
+    const vendor = rows[0];
+    
+    // Extract first and last name from market_name
+    let firstName = 'Vendor';
+    let lastName = '';
+    
+    if (vendor.market_name && vendor.market_name.includes(' ')) {
+      [firstName, ...lastName] = vendor.market_name.split(' ');
+      lastName = lastName.join(' ');
+    } else if (vendor.market_name) {
+      firstName = vendor.market_name;
+    }
+    
+    return res.status(200).json({
       success: true,
-      user: userData
+      user: {
+        id: vendor.id,
+        firstName,
+        lastName,
+        email: vendor.main_email,
+        marketName: vendor.market_name,
+        marketLocation: `${vendor.city}, ${vendor.country}`,
+        role: 'vendor',
+        // Include additional vendor data
+        primaryColor: vendor.primary_color,
+        slug: vendor.slug
+      }
     });
   } catch (error) {
     console.error('Get current user error:', error);
@@ -213,6 +362,26 @@ router.get('/me', (req, res) => {
       success: false, 
       message: 'Server error',
       error: error.message 
+    });
+  }
+});
+
+// Validate token endpoint
+router.get('/validate', verifyToken, (req, res) => {
+  try {
+    res.status(200).json({
+      success: true,
+      message: 'Token is valid',
+      data: {
+        user: req.user
+      }
+    });
+  } catch (error) {
+    console.error('Token validation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
     });
   }
 });
