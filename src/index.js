@@ -26,9 +26,13 @@ const connectionString = process.env.DATABASE_URL;
 
 // Initialize PostgreSQL connection pool with fixed SSL settings
 const pool = new Pool({
-  connectionString,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  database: process.env.DB_NAME,
   ssl: {
-    rejectUnauthorized: false // Changed to false to fix self-signed certificate issue
+    rejectUnauthorized: false,
   }
 });
 
