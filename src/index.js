@@ -22,17 +22,13 @@ dotenv.config();
 
 // Create Express app
 const app = express();
+const connectionString = process.env.DATABASE_URL;
 
-// Initialize PostgreSQL connection pool
+// Initialize PostgreSQL connection pool with fixed SSL settings
 const pool = new Pool({
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
+  connectionString,
   ssl: {
-    rejectUnauthorized: false,
-    sslmode: 'require'
+    rejectUnauthorized: false // Changed to false to fix self-signed certificate issue
   }
 });
 
@@ -41,6 +37,8 @@ const testDbConnection = async () => {
   try {
     const client = await pool.connect();
     console.log('PostgreSQL database connected successfully');
+    const result = await client.query('SELECT version()');
+    console.log('PostgreSQL version:', result.rows[0].version);
     client.release();
   } catch (error) {
     console.error('Database connection error:', error);
@@ -143,6 +141,26 @@ app.get('/api/test', (req, res) => {
   res.json({ message: 'API is working correctly!' });
 });
 
+// Add a database health check route
+app.get('/api/db-status', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const result = await client.query('SELECT NOW() as time');
+    client.release();
+    res.json({
+      status: 'success',
+      message: 'Database connected',
+      time: result.rows[0].time
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: 'Database connection failed',
+      error: error.message
+    });
+  }
+});
+
 // Use authentication routes
 app.use('/api/auth', authRoutes);
 
@@ -178,7 +196,6 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`API URL: http://localhost:${PORT}/api`);
   console.log('CORS: Enabled for all origins (development mode)');
-  console.log('PostgreSQL database: Connected');
 });
 
 export { pool };
