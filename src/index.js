@@ -192,12 +192,6 @@ app.use((req, res) => {
   });
 });
 
-console.log('Environment:');
-console.log(`- NODE_ENV: ${process.env.NODE_ENV}`);
-console.log(`- DB_HOST: ${process.env.DB_HOST}`);
-console.log(`- DB_PORT: ${process.env.DB_PORT}`);
-console.log(`- DB_NAME: ${process.env.DB_NAME}`);
-
 // Define port
 const PORT = process.env.PORT || 5001;
 
