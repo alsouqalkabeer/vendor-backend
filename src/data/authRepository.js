@@ -1,6 +1,7 @@
 import { pool } from '../index.js';
 import bcrypt from 'bcrypt'; // Make sure to install this: npm install bcrypt
 
+
 const authRepository = {
   // Find vendor by email
   findVendorByEmail: async (email) => {
