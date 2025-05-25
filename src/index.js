@@ -12,6 +12,7 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import authRoutes from './routes/auth.js';
 import vendorRoutes from './routes/vendorRoutes.js';
 import productRoutes from './routes/productRoutes.js';
+import accountRoutes from './routes/accountRoutes.js';
 
 // Configure __dirname in ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -170,8 +171,9 @@ app.use('/api/auth', authRoutes);
 
 // Use vendor and product routes
 app.use('/api/vendors', vendorRoutes);
-app.use('/api/products', productRoutes);
+app.use('/api', productRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/account', accountRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
