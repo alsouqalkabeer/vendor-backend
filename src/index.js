@@ -13,6 +13,7 @@ import authRoutes from './routes/auth.js';
 import vendorRoutes from './routes/vendorRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import accountRoutes from './routes/accountRoutes.js';
+import vendorSettingsRoutes from './routes/vendorSettingsRoutes.js';
 
 // Configure __dirname in ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -171,6 +172,7 @@ app.use('/api/auth', authRoutes);
 
 // Use vendor and product routes
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/vendors', vendorSettingsRoutes);
 app.use('/api', productRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/account', accountRoutes);
