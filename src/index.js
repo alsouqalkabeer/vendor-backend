@@ -14,6 +14,11 @@ import vendorRoutes from './routes/vendorRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import accountRoutes from './routes/accountRoutes.js';
 import vendorSettingsRoutes from './routes/vendorSettingsRoutes.js';
+import deliveryAddressRoutes from './routes/deliveryAddressRoutes.js';
+import ordersRoutes from './routes/ordersRoutes.js';
+import couponsRoutes from './routes/couponsRoutes.js';
+import generalCouponsRoutes from './routes/generalCouponsRoutes.js'; // General coupon routes
+
 
 // Configure __dirname in ES module
 const __filename = fileURLToPath(import.meta.url);
@@ -176,6 +181,12 @@ app.use('/api/vendors', vendorSettingsRoutes);
 app.use('/api', productRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/account', accountRoutes);
+app.use('/api/vendors', deliveryAddressRoutes);
+app.use('/api/vendors', deliveryAddressRoutes);
+app.use('/api/vendors', ordersRoutes);
+app.use('/api/vendors', couponsRoutes);
+app.use('/api/coupons', generalCouponsRoutes); // Handles /api/coupons/:id
+
 
 // Error handling middleware
 app.use((err, req, res, next) => {
